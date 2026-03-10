@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Environment & Secrets
+.env
+.env.*
+*.env
+
+# Personal data - NEVER COMMIT
+vault/
+data/
+*.db
+
+# Docker volumes
+pgdata/
+
+# IDE
+.vscode/
+.idea/

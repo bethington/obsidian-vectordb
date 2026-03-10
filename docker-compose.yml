@@ -1,0 +1,62 @@
+services:
+  # PostgreSQL with pgvector extension for semantic search
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: obsidian-vectordb
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: obsidian
+      POSTGRES_USER: obsidian
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme_in_env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/01-init.sql
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U obsidian -d obsidian"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Embedding service using sentence-transformers (CPU mode - fast enough for this scale)
+  embedder:
+    build:
+      context: .
+      dockerfile: Dockerfile.embedder
+    container_name: obsidian-embedder
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://obsidian:${POSTGRES_PASSWORD:-changeme_in_env}@postgres:5432/obsidian
+      VAULT_PATH: /vault
+      EMBEDDING_MODEL: all-MiniLM-L6-v2
+      CHUNK_SIZE: 512
+      CHUNK_OVERLAP: 50
+    volumes:
+      - /home/ben/obsidian-vectordb/vault:/vault:ro
+      - model_cache:/root/.cache
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # Lightweight API for querying (FastAPI)
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: obsidian-search-api
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://obsidian:${POSTGRES_PASSWORD:-changeme_in_env}@postgres:5432/obsidian
+      EMBEDDING_MODEL: all-MiniLM-L6-v2
+    ports:
+      - "8420:8000"
+    volumes:
+      - model_cache:/root/.cache
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  model_cache:
